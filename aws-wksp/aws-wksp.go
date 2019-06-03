@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/workspaces"
+	"os"
 	"sort"
 )
 
 var awsProfile string
 var awsRegion string
-var csvFile string
 
 func init() {
 	const (
@@ -21,13 +21,13 @@ func init() {
 
 	flag.StringVar(&awsProfile, PROFILE, "", "the AWS credentials profile to use")
 	flag.StringVar(&awsRegion, REGION, "us-east-1", "the AWS region to use")
-	flag.StringVar(&csvFile, FILE_NAME, "workspaces.csv", "the workspace details filename")
 }
 
 func main() {
 
 	listBundlesOp := flag.Bool("list-bundles", false, "list workspace bundles")
 	listWorkspacesOp := flag.Bool("list-workspaces", false, "list workspaces")
+	fileName := flag.String("file", "", "file to read from or write to")
 
 	flag.Parse()
 
@@ -45,7 +45,11 @@ func main() {
 
 	if *listBundlesOp {
 		allBundles = getAllBundles(*svc)
-		bundleMapPrinter(allBundles)
+		if len(*fileName) > 0 {
+			writeBundleMap(allBundles, fileName)
+		} else {
+			bundleMapPrinter(allBundles)
+		}
 	}
 	if *listWorkspacesOp {
 		if len(allBundles) == 0 {
@@ -56,8 +60,20 @@ func main() {
 	}
 }
 
+func writeBundleMap(bundles []*workspaces.WorkspaceBundle, fileName *string) {
+	f, err := os.Create(*fileName)
+	checkErr(err)
+	defer f.Close()
+
+	fmt.Fprintf(f, "\"bundle_id\",\"bundle_name\"\n")
+	for _, v := range bundles {
+		fmt.Fprintf(f, "\"%v\",\"%v\"\n", *v.BundleId, *v.Name)
+	}
+	f.Sync()
+}
+
 func makeBundleMap(bundles []*workspaces.WorkspaceBundle) map[string]string {
-	var bundleMap = make(map[string]string,len(bundles))
+	var bundleMap = make(map[string]string, len(bundles))
 	for _, v := range bundles {
 		bundleMap[*v.BundleId] = *v.Name
 	}
@@ -125,7 +141,7 @@ func getWorkspaces(svc workspaces.WorkSpaces) []*workspaces.Workspace {
 func workspacePrinter(workspaceList []*workspaces.Workspace, bundleMap map[string]string) {
 	fmt.Printf("%-15v Description\n", "Bundle ID")
 	for _, v := range workspaceList {
-		fmt.Printf("%v  %v  %v  %v\n", *v.WorkspaceId, *v.State, *v.UserName, bundleMap[*v.BundleId])
+		fmt.Printf("%v  %-10v  %v  %v\n", *v.WorkspaceId, *v.State, *v.UserName, bundleMap[*v.BundleId])
 	}
 }
 
